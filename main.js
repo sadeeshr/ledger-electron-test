@@ -1,17 +1,24 @@
 const electron = require('electron')
 // Module to control application life.
-const app = electron.app
+// const app = electron.app
 // Module to create native browser window.
-const BrowserWindow = electron.BrowserWindow
+// const BrowserWindow = electron.BrowserWindow
+var {app, BrowserWindow, ipcMain} = electron;  
+
 
 const path = require('path')
 const url = require('url')
 
+const ledger = require('ledgerco')
+
+let comm;
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
 let mainWindow
 
 function createWindow () {
+
+ console.log("Ledger: ",ledger);
   // Create the browser window.
   mainWindow = new BrowserWindow({width: 800, height: 600})
 
@@ -23,7 +30,7 @@ function createWindow () {
   }))
 
   // Open the DevTools.
-  // mainWindow.webContents.openDevTools()
+  mainWindow.webContents.openDevTools()
 
   // Emitted when the window is closed.
   mainWindow.on('closed', function () {
@@ -38,6 +45,65 @@ function createWindow () {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.on('ready', createWindow)
+
+// Listen for ledger message from renderer process
+ipcMain.on('ledger', (event, arg) => {  
+  // Print 1
+  console.log("received request");
+  
+  console.log("Ledger request: ", ledger);
+  ledger
+  .comm_node
+  .create_async()
+  .then(function(comm) {
+    var devices = comm.device.getDeviceInfo();
+          console.log(devices);
+          comm = comm;
+              // Reply on ledger message from renderer process
+  event.sender.send('ledger-reply', JSON.stringify(devices));
+  })
+  .catch(function(reason) {
+          console.log('An error occured: ', reason);
+  });
+
+
+});
+
+
+// Listen for ledger message from renderer process
+ipcMain.on('ledger-address', (event, arg) => {  
+  console.log("LIST OF ETHEREUM ADDRESSES: ");
+  console.log("=============================");
+
+  ledger
+  .comm_node
+  .create_async()
+  .then(function(comm) {
+    var devices = comm.device.getDeviceInfo();
+          console.log("COMM: ", comm);
+          var eth = new ledger.eth(comm);
+          console.log(eth);
+          let ethBip32 = "44'/60'/0'/";
+          for (let i = 0; i < 5; i++) {
+              eth.getAddress_async(ethBip32 + i).then(
+                  function (result) {
+                    var address = i + ". BIP32: " + ethBip32 + "  Address: " + result.address;
+                      console.log(address);              
+                      event.sender.send('address-reply', JSON.stringify(devices));
+                  }).fail(
+                  function (error) {
+                      console.log(error);             
+                  });
+                }
+              
+  })
+  .catch(function(reason) {
+          console.log('An error occured: ', reason);
+  });
+
+  
+      
+});
 
 // Quit when all windows are closed.
 app.on('window-all-closed', function () {
