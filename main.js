@@ -1,26 +1,53 @@
 const electron = require('electron')
+const ledger = require('ledgerco')
+
 // Module to control application life.
 // const app = electron.app
 // Module to create native browser window.
 // const BrowserWindow = electron.BrowserWindow
-var {app, BrowserWindow, ipcMain} = electron;  
+var { app, BrowserWindow, ipcMain } = electron;
 
 
 const path = require('path')
 const url = require('url')
-
-const ledger = require('ledgerco')
-
-let comm;
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
 let mainWindow
 
-function createWindow () {
+var ledgercomm
+var eth
 
- console.log("Ledger: ",ledger);
+function createWindow() {
+
+  setTimeout(() => {
+    ledger.comm_node.list_async().then((deviceList) => {
+      connected = deviceList.length > 0
+      console.log("Connected: ", deviceList);
+      ledger.comm_node.create_async().then((comm) => {
+        ledgercomm = comm
+        console.log("LedgerComm: ", ledgercomm);
+        eth = new ledger.eth(ledgercomm);
+        console.log("ETH: ", eth);
+        let ethBip32 = "44'/60'/0'/";
+        
+        for (let i = 0; i < 5; i++) {
+          eth.getAddress_async(ethBip32 + 0)
+            .then(
+            function (result) {
+              console.log("RESULT : ", result);
+              // event.sender.send('address', result);
+            })
+            .catch(
+            function (error) {
+              console.log("ERROR is: ", error);
+            });
+        }
+      }).fail((error) => console.log(error))
+    })
+  }, 1000);
+
   // Create the browser window.
-  mainWindow = new BrowserWindow({width: 800, height: 600})
+  mainWindow = new BrowserWindow({ width: 800, height: 600 })
 
   // and load the index.html of the app.
   mainWindow.loadURL(url.format({
@@ -46,64 +73,26 @@ function createWindow () {
 // Some APIs can only be used after this event occurs.
 app.on('ready', createWindow)
 
-// Listen for ledger message from renderer process
-ipcMain.on('ledger', (event, arg) => {  
-  // Print 1
-  console.log("received request");
-  
-  console.log("Ledger request: ", ledger);
-  ledger
-  .comm_node
-  .create_async()
-  .then(function(comm) {
-    var devices = comm.device.getDeviceInfo();
-          console.log(devices);
-          comm = comm;
-              // Reply on ledger message from renderer process
-  event.sender.send('ledger-reply', JSON.stringify(devices));
-  })
-  .catch(function(reason) {
-          console.log('An error occured: ', reason);
-  });
 
+ipcMain.on('ledger', (event, arg) => {
+  if (arg.action == 'getAddress') {
+    let ethBip32 = "44'/60'/0'/";
 
+    for (let i = 0; i < 5; i++) {
+      eth.getAddress_async(ethBip32 + 0)
+        .then(
+        function (result) {
+          console.log("RESULT : ", result);
+          event.sender.send('address', result);
+        })
+        .catch(
+        function (error) {
+          console.log("ERROR is: ", error);
+        });
+    }
+  }
 });
 
-
-// Listen for ledger message from renderer process
-ipcMain.on('ledger-address', (event, arg) => {  
-  console.log("LIST OF ETHEREUM ADDRESSES: ");
-  console.log("=============================");
-
-  ledger
-  .comm_node
-  .create_async()
-  .then(function(comm) {
-    var devices = comm.device.getDeviceInfo();
-          console.log("COMM: ", comm);
-          var eth = new ledger.eth(comm);
-          console.log(eth);
-          let ethBip32 = "44'/60'/0'/";
-          for (let i = 0; i < 5; i++) {
-              eth.getAddress_async(ethBip32 + i).then(
-                  function (result) {
-                    var address = i + ". BIP32: " + ethBip32 + "  Address: " + result.address;
-                      console.log(address);              
-                      event.sender.send('address-reply', JSON.stringify(devices));
-                  }).fail(
-                  function (error) {
-                      console.log(error);             
-                  });
-                }
-              
-  })
-  .catch(function(reason) {
-          console.log('An error occured: ', reason);
-  });
-
-  
-      
-});
 
 // Quit when all windows are closed.
 app.on('window-all-closed', function () {
